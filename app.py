@@ -17,6 +17,12 @@ client = MongoClient(uri, server_api=ServerApi('1'))
 
 db = client["hobbyhive"]
 
+try:
+    client.admin.command("ping")
+    print("MongoDB connected successfully")
+except Exception as e:
+    print("MongoDB connection failed:", e)
+
 @app.route('/', methods=['GET'])
 def index():
     return make_response("<h1>HobbyHive Backend is running!</h1>", 200)
@@ -29,7 +35,8 @@ def getPosts():
 @app.route('/posts/create', methods=['POST'])
 def createPost():
 
-    required = ["username", "body_text"]
+    # required = ["username", "body_text"]
+    required = ["body_text"]
     missing = [f for f in required if f not in request.form]
 
     if missing:
@@ -40,6 +47,7 @@ def createPost():
         "username": request.form["username"],
         "body_text": request.form["body_text"],
         "media_url": request.form.getlist("media_url"),
+        "image": request.form.get("image", None),
         "created_at": datetime.datetime.utcnow().isoformat() + 'Z'
     }
 
