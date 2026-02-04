@@ -29,8 +29,11 @@ def index():
 
 @app.route('/posts', methods=['GET'])
 def getPosts():
-    posts = list(db.posts.find({}, {'_id': 0}))
-    return make_response(jsonify(posts), 200)
+    data_to_return = []
+    for post in db.posts.find():
+        post['_id'] = str(post['_id'])
+        data_to_return.append(post)
+    return make_response(jsonify(data_to_return), 200)
 
 @app.route('/posts/create', methods=['POST'])
 def createPost():
@@ -53,6 +56,20 @@ def createPost():
 
     new_post_id = db.posts.insert_one(new_post)
     return make_response(jsonify({"message": "Post created", "post_id": str(new_post_id.inserted_id)}), 201)
+
+@app.route('/posts/<string:id>', methods=['DELETE'])
+def delete_post(id):
+
+    try:
+        ObjectId(id)
+    except Exception:
+        return make_response( jsonify( {"error" : "Invalid post ID"} ), 400 )    
+
+    result = db.posts.delete_one({"_id": ObjectId(id)})
+    if result.deleted_count == 1:
+        return make_response( jsonify( {"message": "Post deleted successfully"} ), 204)
+    else:
+        return make_response( jsonify( {"message":"post not found"} ), 404)
 
 
 if __name__ == '__main__':
