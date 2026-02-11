@@ -57,6 +57,33 @@ def createPost():
     new_post_id = db.posts.insert_one(new_post)
     return make_response(jsonify({"message": "Post created", "post_id": str(new_post_id.inserted_id)}), 201)
 
+@app.route('/posts/<string:id>', methods=['PUT'])
+def edit_post(id):
+    
+    try:
+        ObjectId(id)
+    except Exception:
+        return make_response( jsonify( {"error" : "Invalid post ID"} ), 400 )    
+    
+    data = request.get_json()
+    
+    update_fields = {}
+    
+    if 'body_text' in data and data['body_text'].strip() != "":
+        update_fields['body_text'] = data['body_text']     
+                
+    if not update_fields:
+        return make_response( jsonify( {"message" : "No fields to update"} ), 400 )
+    
+    result = db.posts.update_one({"_id": ObjectId(id)}, {"$set": update_fields})
+    
+    if result.matched_count == 1:
+        return make_response( jsonify( {"message": "Post updated successfully"} ), 201)
+    else:
+        return make_response( jsonify( {"message":"post not found"} ), 404)
+    
+    
+
 @app.route('/posts/<string:id>', methods=['DELETE'])
 def delete_post(id):
 
