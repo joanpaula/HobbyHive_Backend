@@ -9,7 +9,7 @@ users_bp = Blueprint("users", __name__)
 
 users = globals.db.users
 
-@users_bp.route("/api/v1.0/users", methods=["POST"])  
+@users_bp.route("/api/v1.0/signup", methods=["POST"])  
 def add_new_user():
 
     required = ["name", "username", "password", "email"]
