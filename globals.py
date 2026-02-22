@@ -18,3 +18,5 @@ aws_s3_bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
 aws_region = os.getenv("AWS_REGION")
 
 db = client["hobbyhive"]
+
+google_API_key = os.getenv("GOOGLE_API_KEY")
