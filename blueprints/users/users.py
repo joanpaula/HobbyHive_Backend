@@ -4,6 +4,7 @@ import bcrypt
 from bson import ObjectId
 from bson import ObjectId
 from decorators import jwt_required, admin_required
+import datetime
 
 users_bp = Blueprint("users", __name__)
 
@@ -25,9 +26,30 @@ def add_new_user():
             "password" : request.form["password"],
             "email" : request.form["email"],
             # "admin" : request.form["admin"].lower() == "true"
-            "admin": False
+            "admin": False,
+            "created_at": datetime.datetime.utcnow().isoformat() + 'Z'
     }    
     new_user["password"] = bcrypt.hashpw(new_user["password"].encode('utf-8'), bcrypt.gensalt())
     new_user_id = users.insert_one(new_user)
     new_user_link = "http://localhost:5000/api/v1.0/users/" + str(new_user_id.inserted_id)
     return make_response( jsonify( {"url": new_user_link} ), 201)
+
+@users_bp.route("/api/v1.0/users/<string:id>")
+@jwt_required
+def get_one_user(id):
+    
+    try:
+        ObjectId(id)
+    except Exception:
+        return make_response( jsonify( {"error" : "Invalid user ID"} ), 400 )    
+
+    user = users.find_one({ "_id" : ObjectId(id) })
+    if user is None:
+        return make_response(jsonify({"error": "User not found"}), 404)
+    user['_id'] = str(user['_id'])
+
+    for key, value in user.items():
+            if isinstance(value, bytes):
+                user[key] = value.decode('utf-8')
+
+    return make_response(jsonify(user), 200)
