@@ -2,7 +2,6 @@ from flask import Blueprint, jsonify, make_response, request
 import datetime
 import globals
 from bson import ObjectId
-from bson import ObjectId
 from decorators import jwt_required, admin_required
 import boto3
 from botocore.exceptions import ClientError
@@ -12,6 +11,7 @@ import uuid
 posts_bp = Blueprint("posts", __name__)
 
 posts = globals.db.posts
+likes = globals.db.likes
 
 AWS_ACCESS_KEY=globals.aws_access_key
 AWS_SECRET_KEY=globals.aws_secret_key
@@ -66,7 +66,11 @@ def generate_presigned_url():
         return jsonify({"error": str(e)}), 500
 
 @posts_bp.route('/api/v1.0/posts', methods=['GET'])
-def getPosts():
+@jwt_required
+def getPosts(current_user):
+    
+    user_id = str(current_user["sub"])
+    
     data_to_return = []
     for post in posts.find():
         post['_id'] = str(post['_id'])
@@ -75,6 +79,13 @@ def getPosts():
             post["media_url"] = [
                 get_presigned_get_url(k) for k in post["media_url"]
             ]
+            
+        liked = likes.find_one({
+            "user_id": user_id,
+            "post_id": post["_id"]
+        }) is not None
+        
+        post["liked"] = liked
         
         data_to_return.append(post)
     return make_response(jsonify(data_to_return), 200)
@@ -94,7 +105,7 @@ def createPost():
         "user_id": str(ObjectId()),
         "username": request.form["username"],
         "body_text": request.form["body_text"],
-        "image": request.form.get("image", None),
+        "likes_count": 0,
         "created_at": datetime.datetime.utcnow().isoformat() + 'Z'
     }
     
