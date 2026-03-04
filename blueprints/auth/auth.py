@@ -7,15 +7,18 @@ from decorators import jwt_required, admin_required
 
 auth_bp = Blueprint("auth", __name__)
 
+# access to users & blacklist dbs (for fetching & storing data)
 users = globals.db.users
 blacklist = globals.db.blacklist
 
+# user login
 @auth_bp.route("/api/v1.0/login", methods=["POST"])
 def login():
     # attempt to retrieve any exisitng authorisation
     auth = request.get_json()
     # for both username and email
     identifier = auth.get("identifier", "").lower()
+    # log in based on user username or email
     if auth:
         user = users.find_one({
             "$or": [
@@ -23,6 +26,7 @@ def login():
                 {"email": identifier}
             ]}
         )
+        # hash password
         if user is not None:
             if bcrypt.checkpw(
                 bytes(auth.get("password", ""), "UTF-8"), user["password"]
@@ -49,9 +53,16 @@ def login():
             )
     return make_response(jsonify({"message": "Authentication required"}), 401)
 
+# log user out
 @auth_bp.route("/api/v1.0/logout", methods=["GET"])
 @jwt_required
 def logout():
+    # send token to blacklist
     token = request.headers["x-access-token"]
     blacklist.insert_one({"token": token})
     return make_response(jsonify({"message": "Logout successful"}), 200)
+
+# will be done later
+# @auth_bp.route("/api/v1.0/forget-password", methods=["POST"])
+# @jwt_required
+# def forget_password():

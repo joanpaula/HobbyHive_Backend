@@ -4,13 +4,16 @@ import googlemaps
 
 places_bp = Blueprint("places", __name__)
 
+# access to user db (for fetching data)
 users = globals.db.users
 
+# google maps api key and client
 GOOGLE_API_KEY = globals.google_API_key
 gmaps = googlemaps.Client(key = GOOGLE_API_KEY)
 
+# get nearby places based on user location (mobiel front end)
 @places_bp.route('/api/v1.0/search/nearby_places', methods=['POST'])
-def getNearbyPlaces():
+def get_nearby_places():
     
     data = request.json
 
@@ -37,9 +40,10 @@ def getNearbyPlaces():
         })
     
     return make_response(jsonify(results), 200)
-        
-@places_bp.route('/api/v1.0/search/nearby_places/<string:place_id>', methods=['POST'])
-def getPlaceDetails(place_id):
+  
+# get details of nearby places 
+@places_bp.route('/api/v1.0/search/nearby_places/<string:place_id>', methods=['GET'])
+def get_place_details(place_id):
     my_fields = [
             'name', 
             'international_phone_number', 

@@ -7,6 +7,8 @@ from blueprints.auth.auth import auth_bp
 from blueprints.places.places import places_bp
 from blueprints.comments.comments import comments_bp
 from blueprints.likes.likes import likes_bp
+from blueprints.hobbies.hobbies import hobbies_bp
+from blueprints.aibot.aibot import aibot_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -17,6 +19,8 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(places_bp)
 app.register_blueprint(comments_bp)
 app.register_blueprint(likes_bp)
+app.register_blueprint(hobbies_bp)
+app.register_blueprint(aibot_bp)
 
 try:
     globals.client.admin.command("ping")

@@ -6,10 +6,12 @@ import datetime
 
 likes_bp = Blueprint("likes", __name__)
 
+# access to users, posts & likes dbs (for fetching & storing data)
 likes = globals.db.likes
 users = globals.db.users
 posts = globals.db.posts
 
+# handles likes functionality for current user
 @likes_bp.route("/api/v1.0/posts/<string:post_id>/like", methods=["PUT"])
 @jwt_required
 def toggle_like(current_user, post_id):

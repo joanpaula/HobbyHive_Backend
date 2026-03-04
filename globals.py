@@ -3,6 +3,8 @@ from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
 import os
 
+# secrets for application
+
 load_dotenv()
 
 secret_key = os.getenv("JWT_SECRET")
@@ -20,3 +22,5 @@ aws_region = os.getenv("AWS_REGION")
 db = client["hobbyhive"]
 
 google_API_key = os.getenv("GOOGLE_API_KEY")
+
+gemini_API_key = os.getenv("GEMINI_API_KEY")

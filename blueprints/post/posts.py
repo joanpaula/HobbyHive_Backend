@@ -10,146 +10,183 @@ import uuid
 
 posts_bp = Blueprint("posts", __name__)
 
+# access to posts & likes dbs (for fetching & storing data)
 posts = globals.db.posts
 likes = globals.db.likes
 
-AWS_ACCESS_KEY=globals.aws_access_key
-AWS_SECRET_KEY=globals.aws_secret_key
-AWS_S3_BUCKET_NAME=globals.aws_s3_bucket_name
-AWS_REGION=globals.aws_region
+# AWS S3 configuration details
+AWS_ACCESS_KEY = globals.aws_access_key
+AWS_SECRET_KEY = globals.aws_secret_key
+AWS_S3_BUCKET_NAME = globals.aws_s3_bucket_name
+AWS_REGION = globals.aws_region
 
+# Initialise boto3 client
 s3_client = boto3.client(
-            service_name = "s3",
-            region_name = AWS_REGION,
-            aws_access_key_id = AWS_ACCESS_KEY,
-            aws_secret_access_key = AWS_SECRET_KEY
-        )
+    service_name="s3",
+    region_name=AWS_REGION,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+)
 
+# generates a temporary url for an S3 object
 def get_presigned_get_url(key: str) -> str:
     try:
         return s3_client.generate_presigned_url(
             ClientMethod="get_object",
-            Params={"Bucket": AWS_S3_BUCKET_NAME, 
-                    "Key": key},
-            ExpiresIn=3600
+            Params={"Bucket": AWS_S3_BUCKET_NAME, "Key": key},
+            ExpiresIn=3600,
         )
     except ClientError:
         return ""
 
-@posts_bp.route('/api/v1.0/presign-url', methods=['POST'])
+# allows client to upload media to S3
+@posts_bp.route("/api/v1.0/presign-url", methods=["POST"])
 def generate_presigned_url():
     data = request.get_json()
     filename = data.get("filename")
     content_type = data.get("contentType")
-    
+
+    # validation
     if not filename:
-        return make_response(jsonify({"error": "Missing filename in request body"}), 400)
-    
+        return make_response(
+            jsonify({"error": "Missing filename in request body"}), 400
+        )
+
     if not content_type:
-        return make_response(jsonify({"error": "Missing content_type in request body"}), 400)
-    
+        return make_response(
+            jsonify({"error": "Missing content_type in request body"}), 400
+        )
+
+    # generates a unique s3 key to prevent duplications or errors
     key = f"uploads/{uuid.uuid4()}_{filename}"
-    
+
     try:
         url = s3_client.generate_presigned_url(
             ClientMethod="put_object",
-            Params={"Bucket": AWS_S3_BUCKET_NAME, 
-                    "Key": key, 
-                    "ContentType": content_type},
-            ExpiresIn=3600
+            Params={
+                "Bucket": AWS_S3_BUCKET_NAME,
+                "Key": key,
+                "ContentType": content_type,
+            },
+            ExpiresIn=3600,
         )
 
-        return jsonify({
-            "uploadUrl": url,
-            "key": key})
+        return jsonify({"uploadUrl": url, "key": key})
     except ClientError as e:
         return jsonify({"error": str(e)}), 500
 
-@posts_bp.route('/api/v1.0/posts', methods=['GET'])
+# Fetches posts (homepage feed) specific to current user
+@posts_bp.route("/api/v1.0/posts", methods=["GET"])
 @jwt_required
-def getPosts(current_user):
-    
+def get_posts(current_user):
+
     user_id = str(current_user["sub"])
-    
+
     data_to_return = []
     for post in posts.find():
-        post['_id'] = str(post['_id'])
-        
+        post["_id"] = str(post["_id"])
+
+        # coverts s3 keys into temporary public url that displays as images/ videos 
         if "media_url" in post:
-            post["media_url"] = [
-                get_presigned_get_url(k) for k in post["media_url"]
-            ]
-            
-        liked = likes.find_one({
-            "user_id": user_id,
-            "post_id": post["_id"]
-        }) is not None
-        
+            post["media_url"] = [get_presigned_get_url(k) for k in post["media_url"]]
+
+        # returns the likes information about current user/ post
+        liked = likes.find_one({"user_id": user_id, "post_id": post["_id"]}) is not None
         post["liked"] = liked
-        
+
         data_to_return.append(post)
     return make_response(jsonify(data_to_return), 200)
 
-@posts_bp.route('/api/v1.0/posts/create', methods=['POST'])
-def createPost():
+# Filters posts by hobby tags
+@posts_bp.route("/api/v1.0/posts/search", methods=["GET"])
+def search_post_by_tags():
+    hobby_tag = request.args.get("hobby_tag")
+
+    if not hobby_tag:
+        return jsonify({"error": "No hobby tag provided"}), 400
+
+    # check if tag exists in the hobby tag array
+    query = {"hobby_tag": {"$in": [hobby_tag]}}
+    found_posts = list(posts.find(query))
+
+    for post in found_posts:
+        post["_id"] = str(post["_id"])
+        
+    return jsonify(found_posts), 200
+
+# allows user create new post
+@posts_bp.route("/api/v1.0/posts/create", methods=["POST"])
+def create_post():
 
     required = ["body_text"]
     missing = [f for f in required if f not in request.form]
 
     if missing:
-        return make_response( jsonify({"error":"Missing fields required: " + ", ".join(missing)} ), 400)
-    
-    media_keys = [m for m in request.form.getlist("media_url") if m] 
+        return make_response(
+            jsonify({"error": "Missing fields required: " + ", ".join(missing)}), 400
+        )
+
+    # extract lists from form data
+    media_keys = [m for m in request.form.getlist("media_url") if m]
+    hobby_tags = request.form.getlist("hobby_tag")
     
     new_post = {
         "user_id": str(ObjectId()),
         "username": request.form["username"],
         "body_text": request.form["body_text"],
         "likes_count": 0,
-        "created_at": datetime.datetime.utcnow().isoformat() + 'Z'
+        "comments_count": 0,
+        "hobby_tag": hobby_tags,
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
-    
+
     if media_keys:
         new_post["media_url"] = media_keys
 
     new_post_id = posts.insert_one(new_post)
-    return make_response(jsonify({"message": "Post created", "post_id": str(new_post_id.inserted_id)}), 201)
+    return make_response(
+        jsonify({"message": "Post created", "post_id": str(new_post_id.inserted_id)}),
+        201,
+    )
 
-@posts_bp.route('/api/v1.0/posts/<string:id>', methods=['PUT'])
+# allows user to edit a post
+@posts_bp.route("/api/v1.0/posts/<string:id>", methods=["PUT"])
 def edit_post(id):
-    
+
     try:
         ObjectId(id)
     except Exception:
-        return make_response( jsonify( {"error" : "Invalid post ID"} ), 400 )    
-    
+        return make_response(jsonify({"error": "Invalid post ID"}), 400)
+
     data = request.get_json()
-    
+
     update_fields = {}
-    
-    if 'body_text' in data and data['body_text'].strip() != "":
-        update_fields['body_text'] = data['body_text']     
-                
+
+    # only update if field is not empty
+    if "body_text" in data and data["body_text"].strip() != "":
+        update_fields["body_text"] = data["body_text"]
+
     if not update_fields:
-        return make_response( jsonify( {"message" : "No fields to update"} ), 400 )
-    
+        return make_response(jsonify({"message": "No fields to update"}), 400)
+
     result = posts.update_one({"_id": ObjectId(id)}, {"$set": update_fields})
-    
+
     if result.matched_count == 1:
-        return make_response( jsonify( {"message": "Post updated successfully"} ), 201)
+        return make_response(jsonify({"message": "Post updated successfully"}), 201)
     else:
-        return make_response( jsonify( {"message":"post not found"} ), 404)
-    
-@posts_bp.route('/api/v1.0/posts/<string:id>', methods=['DELETE'])
+        return make_response(jsonify({"message": "post not found"}), 404)
+
+# allows user to delete post
+@posts_bp.route("/api/v1.0/posts/<string:id>", methods=["DELETE"])
 def delete_post(id):
 
     try:
         ObjectId(id)
     except Exception:
-        return make_response( jsonify( {"error" : "Invalid post ID"} ), 400 )    
+        return make_response(jsonify({"error": "Invalid post ID"}), 400)
 
     result = posts.delete_one({"_id": ObjectId(id)})
     if result.deleted_count == 1:
-        return make_response( jsonify( {"message": "Post deleted successfully"} ), 204)
+        return make_response(jsonify({"message": "Post deleted successfully"}), 204)
     else:
-        return make_response( jsonify( {"message":"post not found"} ), 404)
+        return make_response(jsonify({"message": "post not found"}), 404)
